@@ -1,0 +1,26 @@
+{
+	"name": "gramfood-api-dev",
+	"service": "gramfood-api",
+	"shutdownAction": "none",
+	"workspaceFolder": "/usr/local/src/gramfood-api",
+	"dockerComposeFile": [
+		"compose.yml",
+		"compose.dev.yml"
+	],
+	"features": {
+		"ghcr.io/devcontainers/features/git:1": {}
+	},
+	"customizations": {
+		"vscode": {
+			"settings": {
+				"terminal.integrated.defaultProfile.linux": "bash"
+			},
+			"extensions": [
+				"ms-python.python",
+				"charliermarsh.ruff",
+				"yy0931.vscode-sqlite3-editor",
+				"streetsidesoftware.code-spell-checker"
+			]
+		}
+	}
+}

@@ -1,0 +1,43 @@
+volumes:
+    temp:
+
+networks:
+    general:
+        driver: bridge
+        enable_ipv6: true
+
+services:
+    gramfood-api:
+        build: .
+        image: gramfood-api
+        pull_policy: build
+        volumes:
+            - ./.data/log:/var/log/gramfood-api
+            - ./.data/database:/var/lib/gramfood-api/database
+            - ./.data/certificate:/var/lib/gramfood-api/certificate
+            - temp:/tmp
+        networks:
+            - general
+        ports:
+            - "443:443/tcp"
+        restart: always
+        ulimits:
+            nofile:
+                soft: 2048
+                hard: 32000
+        logging:
+            driver: json-file
+            options:
+                max-size: "1m"
+                max-file: "10"
+                compress: "false"
+        post_start:
+            - user: root
+              command:
+                [
+                    "chown",
+                    "gramfood-api:www-data",
+                    "/var/log/gramfood-api",
+                    "/var/lib/gramfood-api",
+                    "/var/lib/gramfood-api/database"
+                ]

@@ -1,0 +1,54 @@
+[main]
+request_timeout = 10.0 # seconds
+temp_path = "/tmp/gramfood-api"
+
+[log]
+store = true
+console_traceback = true
+console_level = "debug"
+storage_level = "debug"
+
+# The log rotation backup size.
+# Specify Zero to disable log rotation.
+storage_size = 100 # MiB
+
+path = "/var/log/gramfood-api"
+
+[database]
+# The database auto backup interval.
+# Specify Zero to disable auto backup.
+backup_interval = 86400 # seconds
+
+# The maximum number of backup files to keep.
+# Specify Zero to keep all backups.
+maximum_backups = 10
+
+path = "/var/lib/gramfood-api/database"
+
+[api]
+domain = "api.gramfood.ir"
+
+# Whether to enable the Swagger UI documentation.
+ui = true
+
+# The time that server should wait for
+# requests to be handled on server's shutdown.
+graceful_shutdown = 15.0 # seconds
+
+socket_path = "/tmp/gramfood-api/gramfood-api.sock"
+
+[authentication]
+otp_length = 6
+otp_expiry = 120 # seconds
+otp_max_verify_attempts = 10
+otp_rate_limit_max_requests = 5
+otp_rate_limit_window = 3600 # seconds
+
+default_session_max_age = 31556952 # seconds
+kiosk_session_max_age = 900 # seconds
+
+token_hash_salt = "f32366c56a22668af4ac0fb03fa28c2878d8ff5b1fda777b671941ab12324b0a"
+
+[sms]
+template_id = 997905
+api_key = "YP4u6ecmcAd8VNiCqYyqVPmqcWEyMw2G8aeTOl5Ws8su8rmC"

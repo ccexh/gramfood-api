@@ -1,0 +1,6 @@
+.github/agents
+.data
+.venv
+build
+*.egg-info
+**/*.py[cod]

@@ -1,0 +1,13 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: gramfood-api",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "gramfood_api.__main__",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        }
+    ]
+}

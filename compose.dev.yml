@@ -1,0 +1,6 @@
+services:
+    gramfood-api:
+        entrypoint: ["sleep", "infinity"]
+        stop_grace_period: 5s
+        volumes:
+            - ./:/usr/local/src/gramfood-api

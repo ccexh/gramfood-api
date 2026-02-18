@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gramfood-api"
+version = "0.1.0"
+requires-python = ">=3.14"
+authors = [{ name = "Saber Hayati", email = "SaberHayati@outlook.com" }]
+scripts = { gramfood_api = "gramfood_api.__main__:run" }
+optional-dependencies = { dev = ["ruff"] }
+dependencies = [
+    "click==8.3.1",
+    "orjson==3.11.7",
+    "uvloop==0.22.1",
+    "uvicorn==0.40.0",
+    "fastapi==0.129.0",
+    "httpx[http2]==0.28.1"
+]
+
+[tool.setuptools.packages.find]
+include = ["gramfood_api*"]
