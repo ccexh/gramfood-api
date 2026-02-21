@@ -5,6 +5,7 @@ if TYPE_CHECKING:
 
 
 class _ConfigMain(TypedDict):
+    development: bool
     request_timeout: float
     temp_path: str
 

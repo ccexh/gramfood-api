@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Response
+from typing import Annotated
+
+from fastapi import APIRouter, Response, Body
 from starlette.status import (
     HTTP_400_BAD_REQUEST,
     HTTP_502_BAD_GATEWAY,
@@ -6,6 +8,7 @@ from starlette.status import (
 )
 
 from ..dependencies import get_connection
+from ..middlewares import AuthenticationMiddleware
 from ..types import (
     Request,
     OTPVerifyBody,
@@ -144,6 +147,30 @@ async def verify_otp(body: OTPVerifyBody, response: Response) -> OTPVerifyRespon
     )
 
     return OTPVerifyResponse(token=result["token"], max_age=result["max_age"])
+
+
+@router.post(
+    "/verify-token",
+    summary="Checks whether the given token belongs to an active session",
+)
+async def verify_token(
+    request: Request,
+    token: Annotated[
+        str | None,
+        Body(
+            embed=True,
+            description=(
+                "The session token to verify. "
+                "If omitted, the token is read from the Authorization header or cookie."
+            ),
+        ),
+    ] = None,
+) -> bool:
+    token = token or AuthenticationMiddleware.get_token(request)
+    if not token:
+        return False
+
+    return service.get_user(token) is not None
 
 
 @router.post("/logout", summary="Logs out the current user by invalidating the session")

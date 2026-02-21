@@ -14,6 +14,7 @@ AUTHENTICATION_EXCLUDED_ROUTES = {
     "/api",
     "/authentication/request-otp",
     "/authentication/verify-otp",
+    "/authentication/verify-token",
 }
 
 
@@ -24,17 +25,22 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self._authentication_service = AuthenticationService(get_connection())
 
+    @staticmethod
+    def get_token(request: Request) -> str | None:
+        """Extracts the bearer token from the Authorization header or cookie."""
+        if authorization := request.headers.get("authorization"):
+            scheme, _, header_token = authorization.partition(" ")
+            if scheme.lower() == "bearer":
+                return header_token
+            return None
+
+        return request.cookies.get("token")
+
     async def dispatch(
         self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
         if request.url.path not in AUTHENTICATION_EXCLUDED_ROUTES:
-            token: str | None = None
-            if authorization := request.headers.get("authorization"):
-                scheme, _, header_token = authorization.partition(" ")
-                if scheme.lower() == "bearer":
-                    token = header_token
-            else:
-                token = request.cookies.get("token")
+            token = self.get_token(request)
             if not token:
                 raise NotAuthenticatedError()
 

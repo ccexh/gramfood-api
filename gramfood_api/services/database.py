@@ -4,6 +4,7 @@ from datetime import datetime
 
 from .types import OTP, User
 from .constants import Platform
+from .errors import DuplicateUserError
 from ..database import BaseRepository
 
 logger = logging.getLogger(__name__)
@@ -28,8 +29,8 @@ class AuthenticationRepository(BaseRepository):
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     phone TEXT NOT NULL UNIQUE,
                     name TEXT,
-                    created_at DATETIME DEFAULT (strftime('{self._date_format}','now')),
-                    updated_at DATETIME DEFAULT (strftime('{self._date_format}','now'))
+                    created_at DATETIME DEFAULT (strftime('{self._sqlite_date_format}','now')),
+                    updated_at DATETIME DEFAULT (strftime('{self._sqlite_date_format}','now'))
                 );
                 """
             )
@@ -42,7 +43,7 @@ class AuthenticationRepository(BaseRepository):
                     expires_at DATETIME NOT NULL,
                     attempts INTEGER DEFAULT 0,
                     verified BOOLEAN DEFAULT 0,
-                    created_at DATETIME DEFAULT (strftime('{self._date_format}','now')),
+                    created_at DATETIME DEFAULT (strftime('{self._sqlite_date_format}','now')),
                     FOREIGN KEY (phone) REFERENCES users(phone) ON DELETE CASCADE
                 );
                 """
@@ -55,7 +56,7 @@ class AuthenticationRepository(BaseRepository):
                     token TEXT NOT NULL UNIQUE,
                     platform Platform NOT NULL,
                     expires_at DATETIME NOT NULL,
-                    created_at DATETIME DEFAULT (strftime('{self._date_format}','now')),
+                    created_at DATETIME DEFAULT (strftime('{self._sqlite_date_format}','now')),
                     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
                 );
                 """
@@ -112,15 +113,15 @@ class AuthenticationRepository(BaseRepository):
 
         if from_date is not None:
             conditions.append("created_at >= ?")
-            params.append(from_date.strftime(self._date_format))
+            params.append(from_date.strftime(self._sqlite_date_format))
         if to_date is not None:
             conditions.append("created_at <= ?")
-            params.append(to_date.strftime(self._date_format))
+            params.append(to_date.strftime(self._sqlite_date_format))
 
         return self._connection.execute(
             f"""
             SELECT COUNT(*) FROM otp_codes
-            WHERE phone = ? {" AND ".join(conditions) if conditions else ""}
+            WHERE phone = ? {("AND " + " AND ".join(conditions)) if conditions else ""}
             """,
             params,
         ).fetchone()[0]
@@ -145,10 +146,18 @@ class AuthenticationRepository(BaseRepository):
 
     @BaseRepository.auto_commit
     def add_user(self, phone: str) -> int:
-        """Adds a new user record and returns the user ID."""
-        cursor = self._connection.execute(
-            "INSERT INTO users (phone) VALUES (?)", (phone,)
-        )
+        """Adds a new user record and returns the user ID.
+
+        Raises:
+            ``DuplicateUserError``:
+                If a user with the given phone number already exists.
+        """
+        try:
+            cursor = self._connection.execute(
+                "INSERT INTO users (phone) VALUES (?)", (phone,)
+            )
+        except sqlite3.IntegrityError:
+            raise DuplicateUserError(phone)
 
         self._logger.debug(f"User created | phone={phone} id={cursor.lastrowid}")
         return cursor.lastrowid
@@ -172,7 +181,7 @@ class AuthenticationRepository(BaseRepository):
             SELECT * FROM users
             JOIN sessions ON users.id = sessions.user_id
             WHERE sessions.token = ?
-                AND sessions.expires_at > strftime('{self._date_format}','now')
+                AND sessions.expires_at > strftime('{self._sqlite_date_format}','now')
             """,
             (token,),
         ).fetchone()
@@ -213,13 +222,13 @@ class AuthenticationRepository(BaseRepository):
         sessions = self._connection.execute(
             f"""
             DELETE FROM sessions
-            WHERE expires_at <= strftime('{self._date_format}','now')
+            WHERE expires_at <= strftime('{self._sqlite_date_format}','now')
             """
         ).rowcount
         otps = self._connection.execute(
             f"""
             DELETE FROM otp_codes
-            WHERE expires_at <= strftime('{self._date_format}','now') OR verified = 1
+            WHERE expires_at <= strftime('{self._sqlite_date_format}','now') OR verified = 1
             """
         ).rowcount
 

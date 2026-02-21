@@ -82,7 +82,7 @@ class ConfigManager:
         self._validate()
 
         if not (temp_path := Path(self._config["main"]["temp_path"])).exists():
-            temp_path.mkdir(mode=0o750, parents=True, exist_ok=True)
+            temp_path.mkdir(mode=0o755, parents=True, exist_ok=True)
 
 
 config = ConfigManager()

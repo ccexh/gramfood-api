@@ -9,6 +9,7 @@ from fastapi.middleware import Middleware
 from fastapi.exceptions import HTTPException
 from fastapi.responses import JSONResponse, ORJSONResponse
 from fastapi.exception_handlers import http_exception_handler
+from starlette.middleware.cors import CORSMiddleware
 from starlette.status import HTTP_400_BAD_REQUEST, HTTP_500_INTERNAL_SERVER_ERROR
 
 from .routes import authentication
@@ -41,6 +42,12 @@ app = FastAPI(
         "displayRequestDuration": True,
     },
 )
+
+if config["main"]["development"]:
+    cors = ["*"]
+    app.add_middleware(
+        CORSMiddleware, allow_origins=cors, allow_methods=cors, allow_headers=cors
+    )
 
 
 @app.exception_handler(Exception)

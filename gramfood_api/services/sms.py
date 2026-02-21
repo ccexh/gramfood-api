@@ -1,4 +1,5 @@
 import logging
+import secrets
 
 import httpx
 import orjson
@@ -36,27 +37,32 @@ class SMSProviderClient:
             "parameters": [{"name": "OTP", "value": code}],
         }
 
-        try:
-            response = await self._client.post(
-                "/send/verify",
-                headers={"Content-Type": "application/json"},
-                content=orjson.dumps(content),
-            )
-        except httpx.HTTPError as error:
-            raise SMSSendError(
-                phone, payload={"phone": phone, "request": content}
-            ) from error
+        if config["main"]["development"]:
+            message_id = secrets.randbelow(10**10)
+            logger.debug(f"Simulated OTP send | phone={phone} code={code}")
+        else:
+            try:
+                response = await self._client.post(
+                    "/send/verify",
+                    headers={"Content-Type": "application/json"},
+                    content=orjson.dumps(content),
+                )
+            except httpx.HTTPError as error:
+                raise SMSSendError(
+                    phone, payload={"phone": phone, "request": content}
+                ) from error
 
-        data = orjson.loads(response.content)
-        if response.status_code != 200 or data.get("status") != 1:
-            raise SMSSendError(
-                phone, payload={"phone": phone, "request": content, "response": data}
-            )
+            data = orjson.loads(response.content)
+            if response.status_code != 200 or data.get("status") != 1:
+                raise SMSSendError(
+                    phone,
+                    payload={"phone": phone, "request": content, "response": data},
+                )
 
-        data = data["data"]
-        message_id = data["messageId"]
-        logger.info(
-            f"OTP SMS sent | phone={phone} message_id={message_id} cost={data['cost']}"
-        )
+            data = data["data"]
+            message_id = data["messageId"]
+            logger.info(
+                f"OTP SMS sent | phone={phone} message_id={message_id} cost={data['cost']}"
+            )
 
         return message_id

@@ -16,12 +16,24 @@ class SMSSendError(BaseError):
         )
 
 
+class DuplicateUserError(Exception):
+    """User with the given phone number already exists."""
+
+    def __init__(self, phone: str, **kwargs) -> None:
+        super().__init__(
+            f"User with phone '{phone}' already exists.",
+            1001,
+            http_code=codes.BAD_REQUEST,
+            **kwargs,
+        )
+
+
 class OTPRateLimitError(BaseError):
     """OTP request rate limit is exceeded."""
 
     def __init__(self, **kwargs) -> None:
         super().__init__(
-            "OTP rate limit exceeded", 1001, http_code=codes.TOO_MANY_REQUESTS, **kwargs
+            "OTP rate limit exceeded", 1002, http_code=codes.TOO_MANY_REQUESTS, **kwargs
         )
 
 
@@ -31,7 +43,7 @@ class OTPMaxAttemptsError(BaseError):
     def __init__(self, **kwargs) -> None:
         super().__init__(
             "OTP maximum verification attempts exceeded",
-            1002,
+            1003,
             http_code=codes.TOO_MANY_REQUESTS,
             **kwargs,
         )
@@ -41,7 +53,7 @@ class OTPExpiredError(BaseError):
     """OTP has expired."""
 
     def __init__(self, **kwargs) -> None:
-        super().__init__("OTP has expired", 1003, http_code=codes.BAD_REQUEST, **kwargs)
+        super().__init__("OTP has expired", 1004, http_code=codes.BAD_REQUEST, **kwargs)
 
 
 class OTPInvalidError(BaseError):
@@ -49,5 +61,5 @@ class OTPInvalidError(BaseError):
 
     def __init__(self, **kwargs) -> None:
         super().__init__(
-            "Invalid OTP code", 1004, http_code=codes.BAD_REQUEST, **kwargs
+            "Invalid OTP code", 1005, http_code=codes.BAD_REQUEST, **kwargs
         )

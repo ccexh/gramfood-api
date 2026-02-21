@@ -235,7 +235,11 @@ class BaseRepository(ABC):
 
         self._is_transaction_started = False
         self._is_internal_connection = connection is None
+
+        # SQLite's `%f` means `SS.SSS` (seconds with 3 decimal places),
+        # unlike Python's `%f` which means microseconds only.
         self._date_format = "%Y-%m-%d %H:%M:%S.%f"
+        self._sqlite_date_format = "%Y-%m-%d %H:%M:%f"
 
         self._ensure_schema()
 
@@ -268,7 +272,7 @@ class BaseRepository(ABC):
             )
             sqlite3.register_converter(
                 "DATETIME",
-                lambda b: datetime.strptime(b.decode(), self._date_format).replace(
+                lambda b: datetime.fromisoformat(b.decode()).replace(
                     tzinfo=timezone.utc
                 ),
             )

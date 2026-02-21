@@ -4,6 +4,7 @@ import logging
 import secrets
 import sqlite3
 from datetime import timedelta
+from contextlib import suppress
 
 from .constants import Platform
 from .sms import SMSProviderClient
@@ -15,6 +16,7 @@ from .errors import (
     OTPInvalidError,
     OTPRateLimitError,
     OTPMaxAttemptsError,
+    DuplicateUserError,
 )
 from ..config import config
 from ..utils import current_time
@@ -81,6 +83,9 @@ class AuthenticationService:
 
             length = config_authentication["otp_length"]
             code = str(secrets.randbelow(10**length)).zfill(length)
+            with suppress(DuplicateUserError):
+                repo.add_user(phone)
+
             otp_id = repo.add_otp(
                 phone, self._hash_token(code), now + timedelta(seconds=otp_expiry)
             )

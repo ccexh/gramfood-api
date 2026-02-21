@@ -1,4 +1,5 @@
 [main]
+development = true
 request_timeout = 10.0 # seconds
 temp_path = "/tmp/gramfood-api"
 
@@ -50,5 +51,5 @@ kiosk_session_max_age = 900 # seconds
 token_hash_salt = "f32366c56a22668af4ac0fb03fa28c2878d8ff5b1fda777b671941ab12324b0a"
 
 [sms]
-template_id = 997905
+template_id = 997905 # 964654
 api_key = "YP4u6ecmcAd8VNiCqYyqVPmqcWEyMw2G8aeTOl5Ws8su8rmC"
