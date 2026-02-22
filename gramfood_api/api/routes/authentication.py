@@ -1,5 +1,3 @@
-from typing import Annotated
-
 from fastapi import APIRouter, Response, Body
 from starlette.status import (
     HTTP_400_BAD_REQUEST,
@@ -7,16 +5,16 @@ from starlette.status import (
     HTTP_429_TOO_MANY_REQUESTS,
 )
 
-from ..dependencies import get_connection
-from ..middlewares import AuthenticationMiddleware
-from ..types import (
-    Request,
+from .types import (
     OTPVerifyBody,
     OTPRequestBody,
     OTPVerifyResponse,
     OTPRequestResponse,
+    VerifyTokenBody,
 )
-from ...types import HTTPSerializedError
+from ..dependencies import get_connection
+from ..middlewares import AuthenticationMiddleware
+from ..types import Request
 from ...services import errors
 from ...services.database import AuthenticationRepository
 from ...services.authentication import AuthenticationService
@@ -31,34 +29,26 @@ router = APIRouter(prefix="/authentication", tags=["authentication"])
     response_description="The OTP expiry duration in seconds",
     responses={
         HTTP_429_TOO_MANY_REQUESTS: {
-            "model": HTTPSerializedError,
+            "model": errors.OTPRateLimitError.openapi_model(),
             "content": {
                 "application/json": {
                     "examples": {
                         "OTP rate limit exceeded": {
-                            "value": {
-                                "details": [
-                                    errors.OTPRateLimitError(
-                                        payload={"back_off": 60}
-                                    ).serialize()
-                                ]
-                            }
+                            "value": errors.OTPRateLimitError(
+                                payload={"back_off": 60}
+                            ).serialize()
                         },
                     }
                 }
             },
         },
         HTTP_502_BAD_GATEWAY: {
-            "model": HTTPSerializedError,
+            "model": errors.SMSSendError.openapi_model(),
             "content": {
                 "application/json": {
                     "examples": {
                         "Failed to send SMS": {
-                            "value": {
-                                "details": [
-                                    errors.SMSSendError("09170000000").serialize()
-                                ]
-                            }
+                            "value": errors.SMSSendError("09170000000").serialize()
                         },
                     }
                 }
@@ -77,54 +67,45 @@ async def request_otp(body: OTPRequestBody) -> OTPRequestResponse:
     response_description="The session token and its max age",
     responses={
         HTTP_400_BAD_REQUEST: {
-            "model": HTTPSerializedError,
+            "model": (
+                errors.OTPInvalidError.openapi_model()
+                | errors.OTPExpiredError.openapi_model()
+            ),
             "content": {
                 "application/json": {
                     "examples": {
                         "invalid OTP code": {
-                            "value": {
-                                "details": [
-                                    errors.OTPInvalidError(
-                                        payload={
-                                            "phone": "09170000000",
-                                            "code": "1234",
-                                        }
-                                    ).serialize()
-                                ]
-                            }
+                            "value": errors.OTPInvalidError(
+                                payload={
+                                    "phone": "09170000000",
+                                    "code": "1234",
+                                }
+                            ).serialize()
                         },
                         "OTP has expired": {
-                            "value": {
-                                "details": [
-                                    errors.OTPExpiredError(
-                                        payload={
-                                            "phone": "09170000000",
-                                            "code": "1234",
-                                        }
-                                    ).serialize()
-                                ]
-                            }
+                            "value": errors.OTPExpiredError(
+                                payload={
+                                    "phone": "09170000000",
+                                    "code": "1234",
+                                }
+                            ).serialize()
                         },
                     }
                 }
             },
         },
         HTTP_429_TOO_MANY_REQUESTS: {
-            "model": HTTPSerializedError,
+            "model": errors.OTPMaxAttemptsError.openapi_model(),
             "content": {
                 "application/json": {
                     "examples": {
                         "maximum verification attempts exceeded": {
-                            "value": {
-                                "details": [
-                                    errors.OTPMaxAttemptsError(
-                                        payload={
-                                            "phone": "09123456789",
-                                            "code": "1234",
-                                        }
-                                    ).serialize()
-                                ]
-                            }
+                            "value": errors.OTPMaxAttemptsError(
+                                payload={
+                                    "phone": "09123456789",
+                                    "code": "1234",
+                                }
+                            ).serialize()
                         },
                     }
                 }
@@ -155,18 +136,11 @@ async def verify_otp(body: OTPVerifyBody, response: Response) -> OTPVerifyRespon
 )
 async def verify_token(
     request: Request,
-    token: Annotated[
-        str | None,
-        Body(
-            embed=True,
-            description=(
-                "The session token to verify. "
-                "If omitted, the token is read from the Authorization header or cookie."
-            ),
-        ),
-    ] = None,
+    body: VerifyTokenBody | None = Body(None),
 ) -> bool:
-    token = token or AuthenticationMiddleware.get_token(request)
+    token = (body.token if body and body.token is not None else None) or (
+        AuthenticationMiddleware.get_token(request)
+    )
     if not token:
         return False
 
@@ -175,7 +149,7 @@ async def verify_token(
 
 @router.post("/logout", summary="Logs out the current user by invalidating the session")
 async def logout(request: Request, response: Response) -> "None":
-    token = request.extract_token()
+    token = AuthenticationMiddleware.get_token(request)
     with AuthenticationRepository(get_connection()) as repo:
-        if repo.delete_session(service.hash_token(token)):
+        if repo.delete_session(service._hash_token(token)):
             response.delete_cookie("token")

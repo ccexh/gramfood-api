@@ -1,12 +1,14 @@
 from collections.abc import Callable, Awaitable
 
 from fastapi import Response
+from fastapi.responses import ORJSONResponse
 from starlette.types import ASGIApp
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from .types import Request
 from .dependencies import get_connection
 from .errors import InvalidSessionError, NotAuthenticatedError
+from ..errors import BaseError
 from ..services.authentication import AuthenticationService
 
 AUTHENTICATION_EXCLUDED_ROUTES = {
@@ -26,6 +28,11 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
         self._authentication_service = AuthenticationService(get_connection())
 
     @staticmethod
+    def _error_response(error: BaseError) -> ORJSONResponse:
+        """Creates a JSON error response from a ``BaseError`` instance."""
+        return ORJSONResponse(error.serialize(), status_code=error.http_code)
+
+    @staticmethod
     def get_token(request: Request) -> str | None:
         """Extracts the bearer token from the Authorization header or cookie."""
         if authorization := request.headers.get("authorization"):
@@ -42,11 +49,11 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
         if request.url.path not in AUTHENTICATION_EXCLUDED_ROUTES:
             token = self.get_token(request)
             if not token:
-                raise NotAuthenticatedError()
+                return self._error_response(NotAuthenticatedError())
 
             user = self._authentication_service.get_user(token)
             if user is None:
-                raise InvalidSessionError()
+                return self._error_response(InvalidSessionError())
 
             request.state.user = user
 

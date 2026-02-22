@@ -1,84 +1,113 @@
 import asyncio
 import logging
-from contextlib import asynccontextmanager, suppress
-from collections.abc import AsyncGenerator
+from typing import ClassVar
+from contextlib import suppress, asynccontextmanager
+from collections.abc import AsyncGenerator, Callable
 
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware import Middleware
-from fastapi.exceptions import HTTPException
 from fastapi.responses import JSONResponse, ORJSONResponse
-from fastapi.exception_handlers import http_exception_handler
+from fastapi.exceptions import RequestValidationError, ResponseValidationError
+from starlette.status import (
+    HTTP_422_UNPROCESSABLE_CONTENT,
+    HTTP_500_INTERNAL_SERVER_ERROR,
+)
 from starlette.middleware.cors import CORSMiddleware
-from starlette.status import HTTP_400_BAD_REQUEST, HTTP_500_INTERNAL_SERVER_ERROR
 
 from .routes import authentication
+from .errors import ValidationError
 from .dependencies import close_connection
 from .middlewares import AuthenticationMiddleware
 from .. import __version__
 from ..config import config
 from ..cleanup import Cleanup
-from ..types import HTTPSerializedError
+from ..types import SerializedError
 from ..errors import BaseError, UnexpectedError
 
 logger = logging.getLogger(__name__)
-app = FastAPI(
-    middleware=[Middleware(AuthenticationMiddleware)],
-    responses={
-        HTTP_400_BAD_REQUEST: (model := {"model": HTTPSerializedError}),
-        HTTP_500_INTERNAL_SERVER_ERROR: model,
-    },
-    default_response_class=ORJSONResponse,
-    version=__version__,
-    title="GramFood API",
-    root_path="/",
-    openapi_url="/openapi.json" if config["api"]["ui"] else None,
-    docs_url="/api",
-    redoc_url=None,
-    swagger_ui_oauth2_redirect_url=None,
-    swagger_ui_parameters={
-        "filter": True,
-        "tryItOutEnabled": True,
-        "displayRequestDuration": True,
-    },
-)
-
-if config["main"]["development"]:
-    cors = ["*"]
-    app.add_middleware(
-        CORSMiddleware, allow_origins=cors, allow_methods=cors, allow_headers=cors
-    )
-
-
-@app.exception_handler(Exception)
-async def exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    if not isinstance(exc, BaseError):
-        exc = UnexpectedError(cause=exc)
-
-    return await http_exception_handler(
-        request, HTTPException(exc.http_code, exc.serialize())
-    )
 
 
 class API:
-    """
-    The API server class that manages the
-    FastAPI application and its lifecycle.
-    """
+    """The API server class that manages the FastAPI application and its lifecycle."""
 
-    __initiated = False
+    __initiated: ClassVar[bool] = False
+
+    _original_openapi: ClassVar[Callable[[], dict] | None] = None
+    app: ClassVar[FastAPI | None] = None
 
     def __init__(self) -> None:
         self._task: asyncio.Task | None = None
         self._server: uvicorn.Server | None = None
 
         if not API.__initiated:
-            app.router.lifespan_context = self._lifespan
-            app.include_router(authentication.router)
+            self.app = FastAPI(
+                middleware=[Middleware(AuthenticationMiddleware)],
+                responses={
+                    HTTP_422_UNPROCESSABLE_CONTENT: {
+                        "model": ValidationError.openapi_model(),
+                        "content": {
+                            "application/json": {
+                                "examples": {
+                                    "Request validation failed": {
+                                        "value": ValidationError(
+                                            "Field required",
+                                            payload={
+                                                "fields": ["field1", "field2"],
+                                                "input": None,
+                                            },
+                                        ).serialize()
+                                    }
+                                }
+                            }
+                        },
+                    },
+                    HTTP_500_INTERNAL_SERVER_ERROR: {
+                        "model": BaseError.openapi_model()
+                        | UnexpectedError.openapi_model()
+                    },
+                },
+                default_response_class=ORJSONResponse,
+                version=__version__,
+                title="GramFood API",
+                root_path="/",
+                openapi_url="/openapi.json" if config["api"]["ui"] else None,
+                docs_url="/api",
+                redoc_url=None,
+                swagger_ui_oauth2_redirect_url=None,
+                swagger_ui_parameters={
+                    "filter": True,
+                    "tryItOutEnabled": True,
+                    "displayRequestDuration": True,
+                },
+            )
+
+            if config["main"]["development"]:
+                cors = ["*"]
+                self.app.add_middleware(
+                    CORSMiddleware,
+                    allow_origins=cors,
+                    allow_methods=cors,
+                    allow_headers=cors,
+                )
+
+            API._original_openapi = self.app.openapi
+            self.app.openapi = self._customize_openapi
+
+            for exc_type, handler in (
+                (RequestValidationError, self._handle_request_validation),
+                (ResponseValidationError, self._handle_response_validation),
+                (BaseError, self._handle_base_error),
+                (Exception, self._handle_unexpected_error),
+            ):
+                self.app.exception_handler(exc_type)(handler)
+
+            self.app.router.lifespan_context = self._lifespan
+            self.app.include_router(authentication.router)
 
             self._server = uvicorn.Server(
                 uvicorn.Config(
-                    app,
+                    self.app,
                     port=443,
                     host="0.0.0.0",
                     log_config=None,  # Already configured
@@ -95,6 +124,105 @@ class API:
             )
 
             API.__initiated = True
+
+    @staticmethod
+    def _replace_refs(obj: object, old_ref: str, new_ref: str) -> None:
+        """Recursively replaces all `$ref` values in the OpenAPI schema."""
+        if isinstance(obj, dict):
+            for key, value in obj.items():
+                if key == "$ref" and value == old_ref:
+                    obj[key] = new_ref
+                else:
+                    API._replace_refs(value, old_ref, new_ref)
+        elif isinstance(obj, list):
+            for item in obj:
+                API._replace_refs(item, old_ref, new_ref)
+
+    @staticmethod
+    def _customize_openapi() -> dict:
+        """
+        Customizes the OpenAPI schema by removing FastAPI's auto-generated
+        validation error schemas and renaming ``SerializedError`` to ``BaseError``.
+        """
+        schema = API._original_openapi()
+        schemas = schema.get("components", {}).get("schemas", {})
+        schemas.pop("HTTPValidationError", None)
+        schemas.pop("SerializedError", None)
+
+        # Replacing leftover ``SerializedError`` references
+        # from the `cause` annotation with ``BaseError``
+        API._replace_refs(
+            schema,
+            f"#/components/schemas/{SerializedError.__name__}",
+            f"#/components/schemas/{BaseError.__name__}",
+        )
+
+        return schema
+
+    @staticmethod
+    async def _handle_request_validation(
+        request: Request, exc: RequestValidationError
+    ) -> JSONResponse:
+        return ORJSONResponse(
+            {
+                "error": "ValidationError",
+                "message": "Request validation failed",
+                "cause": [
+                    {
+                        "error": error["type"],
+                        "message": error["msg"],
+                        "payload": {
+                            "fields": list(error["loc"]),
+                            "input": error.get("input"),
+                        },
+                    }
+                    for error in exc.errors()
+                ],
+            },
+            status_code=HTTP_422_UNPROCESSABLE_CONTENT,
+        )
+
+    @staticmethod
+    async def _handle_response_validation(
+        request: Request, exc: ResponseValidationError
+    ) -> JSONResponse:
+        logger.exception(
+            f"Response validation error on path '{request.url.path}'",
+            exc_info=exc,
+        )
+
+        return ORJSONResponse(
+            {
+                "error": "ResponseValidationError",
+                "message": "Response validation failed",
+                "cause": [
+                    {
+                        "error": error["type"],
+                        "message": error["msg"],
+                        "payload": {"fields": list(error["loc"])},
+                    }
+                    for error in exc.errors()
+                ],
+            },
+            status_code=HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+    @staticmethod
+    async def _handle_base_error(request: Request, exc: BaseError) -> JSONResponse:
+        return ORJSONResponse(exc.serialize(), status_code=exc.http_code)
+
+    @staticmethod
+    async def _handle_unexpected_error(
+        request: Request, exc: Exception
+    ) -> JSONResponse:
+        error = UnexpectedError(
+            "Unexpected error happened in the API",
+            cause=exc,
+            payload={"path": request.url.path},
+        )
+
+        logger.exception(error)
+        return ORJSONResponse(error.serialize(), status_code=error.http_code)
 
     @staticmethod
     @asynccontextmanager

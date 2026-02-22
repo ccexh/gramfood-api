@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, ClassVar, TypedDict
 from collections.abc import Sequence
 
 from httpx import codes
@@ -25,6 +25,8 @@ class BaseError(Exception):
             Whether the `payload` attribute should be included in the
             serialized version of the exception.
     """
+
+    _openapi_models: ClassVar[dict[str, type]] = {}
 
     def __init__(
         self,
@@ -94,7 +96,7 @@ class BaseError(Exception):
             ]
             return errors[0] if len(errors) == 1 else errors
 
-        serialized = {"type": exception.__class__.__name__, "message": str(exception)}
+        serialized = {"error": exception.__class__.__name__, "message": str(exception)}
         if _group:
             serialized["group"] = _group
         if isinstance(exception, BaseError):
@@ -107,10 +109,10 @@ class BaseError(Exception):
 
         return serialized
 
-    def serialize(self) -> list[SerializedError]:
+    def serialize(self) -> SerializedError:
         """Returns the serializable version of the exception."""
         serialized = self._serialize_exception(self)
-        return serialized if type(serialized) is list else [serialized]
+        return serialized if type(serialized) is not list else serialized[0]
 
     @staticmethod
     def create_exception_group(
@@ -124,27 +126,20 @@ class BaseError(Exception):
                 exceptions = (exceptions,)
             return ExceptionGroup(message, exceptions)
 
+    @classmethod
+    def openapi_model(cls) -> type:
+        """Dynamically generates a `TypedDict` for OpenAPI schema representation."""
+        class_name = cls.__name__
+        if class_name not in cls._openapi_models:
+            cls._openapi_models[class_name] = TypedDict(
+                class_name, SerializedError.__annotations__
+            )
+
+        return cls._openapi_models[class_name]
+
 
 class UnexpectedError(BaseError):
     """Unexpected error happened."""
 
     def __init__(self, message: str = "Unexpected error happened", **kwargs) -> None:
         super().__init__(message, 0, http_code=codes.INTERNAL_SERVER_ERROR, **kwargs)
-
-    def serialize(self) -> list[SerializedError]:
-        if self.__cause__:
-            for exception in (
-                self.__cause__.exceptions
-                if isinstance(self.__cause__, ExceptionGroup)
-                else [self.__cause__]
-            ):
-                if not isinstance(exception, BaseError):
-                    return super().serialize()
-
-            # All the exceptions are subclass of the ``BaseError``.
-            # Therefore, using them directly instead of wrapping
-            # them inside of ``UnexpectedError``.
-            serialized = self._serialize_exception(self.__cause__)
-            return serialized if type(serialized) is list else [serialized]
-
-        return super().serialize()

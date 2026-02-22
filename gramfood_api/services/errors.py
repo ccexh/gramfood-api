@@ -16,7 +16,7 @@ class SMSSendError(BaseError):
         )
 
 
-class DuplicateUserError(Exception):
+class DuplicateUserError(BaseError):
     """User with the given phone number already exists."""
 
     def __init__(self, phone: str, **kwargs) -> None:

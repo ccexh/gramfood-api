@@ -63,16 +63,12 @@ class DatabaseSchema(TypedDict):
 
 
 class SerializedError(TypedDict):
-    type: str
+    error: str
     message: str
     group: NotRequired[str]
     code: NotRequired[int]
     cause: NotRequired[list[SerializedError]]
     payload: NotRequired[Any]
-
-
-class HTTPSerializedError(TypedDict):
-    details: list[SerializedError]
 
 
 class DataUnits(TypedDict):
