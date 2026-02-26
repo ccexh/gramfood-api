@@ -1,11 +1,10 @@
 from collections.abc import Callable, Awaitable
 
 from fastapi import Response
-from fastapi.responses import ORJSONResponse
 from starlette.types import ASGIApp
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from .types import Request
+from .types import Request, JSONResponse
 from .dependencies import get_connection
 from .errors import InvalidSessionError, NotAuthenticatedError
 from ..errors import BaseError
@@ -28,9 +27,9 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
         self._authentication_service = AuthenticationService(get_connection())
 
     @staticmethod
-    def _error_response(error: BaseError) -> ORJSONResponse:
+    def _error_response(error: BaseError) -> JSONResponse:
         """Creates a JSON error response from a ``BaseError`` instance."""
-        return ORJSONResponse(error.serialize(), status_code=error.http_code)
+        return JSONResponse(error.serialize(), status_code=error.http_code)
 
     @staticmethod
     def get_token(request: Request) -> str | None:

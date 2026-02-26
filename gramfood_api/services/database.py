@@ -3,7 +3,7 @@ import logging
 from datetime import datetime
 
 from .types import OTP, User
-from .constants import Platform
+from .constants import Platform, Role
 from .errors import DuplicateUserError
 from ..database import BaseRepository
 
@@ -20,6 +20,7 @@ class AuthenticationRepository(BaseRepository):
         self._logger = logger.getChild(self.__class__.__name__)
 
     def schema(self) -> None:
+        sqlite3.register_converter("Role", lambda b: Role(b.decode()))
         sqlite3.register_converter("Platform", lambda b: Platform(b.decode()))
 
         with self._connection:
@@ -29,6 +30,7 @@ class AuthenticationRepository(BaseRepository):
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     phone TEXT NOT NULL UNIQUE,
                     name TEXT,
+                    role Role NOT NULL DEFAULT '{Role.USER.value}',
                     created_at DATETIME DEFAULT (strftime('{self._sqlite_date_format}','now')),
                     updated_at DATETIME DEFAULT (strftime('{self._sqlite_date_format}','now'))
                 );

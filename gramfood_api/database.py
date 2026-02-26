@@ -1,3 +1,4 @@
+import json
 import asyncio
 import logging
 import sqlite3
@@ -8,8 +9,6 @@ from pathlib import Path
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from collections.abc import Callable
-
-import orjson
 
 from .config import config
 from .cleanup import Cleanup
@@ -90,8 +89,8 @@ class Database:
             connection.close()
 
         if path:
-            with open(path, "wb") as file:
-                file.write(orjson.dumps(output, option=orjson.OPT_INDENT_2))
+            with open(path, "w") as file:
+                json.dump(output, file, indent=2)
 
         return output
 

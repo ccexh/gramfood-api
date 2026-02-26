@@ -2,7 +2,7 @@ from typing import TypedDict, TYPE_CHECKING
 from datetime import datetime
 
 if TYPE_CHECKING:
-    from .constants import Platform
+    from .constants import Platform, Role
 
 
 class OTP(TypedDict):
@@ -19,6 +19,7 @@ class User(TypedDict):
     id: int
     phone: str
     name: str | None
+    role: Role
     created_at: datetime
     updated_at: datetime
 

@@ -1,8 +1,8 @@
+import json
 import logging
 import secrets
 
 import httpx
-import orjson
 
 from .errors import SMSSendError
 from ..config import config
@@ -45,14 +45,14 @@ class SMSProviderClient:
                 response = await self._client.post(
                     "/send/verify",
                     headers={"Content-Type": "application/json"},
-                    content=orjson.dumps(content),
+                    content=json.dumps(content).encode(),
                 )
             except httpx.HTTPError as error:
                 raise SMSSendError(
                     phone, payload={"phone": phone, "request": content}
                 ) from error
 
-            data = orjson.loads(response.content)
+            data = json.loads(response.content)
             if response.status_code != 200 or data.get("status") != 1:
                 raise SMSSendError(
                     phone,

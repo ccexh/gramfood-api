@@ -7,3 +7,12 @@ class Platform(StrEnum):
 
     DEFAULT = "default"
     KIOSK = "kiosk"
+
+
+@unique
+class Role(StrEnum):
+    """The user role for access control."""
+
+    ADMIN = "admin"
+    USER = "user"
+    OPERATOR = "operator"

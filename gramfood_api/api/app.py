@@ -7,7 +7,6 @@ from collections.abc import AsyncGenerator, Callable
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware import Middleware
-from fastapi.responses import JSONResponse, ORJSONResponse
 from fastapi.exceptions import RequestValidationError, ResponseValidationError
 from starlette.status import (
     HTTP_422_UNPROCESSABLE_CONTENT,
@@ -15,9 +14,10 @@ from starlette.status import (
 )
 from starlette.middleware.cors import CORSMiddleware
 
-from .routes import authentication
+from .types import JSONResponse
 from .errors import ValidationError
 from .dependencies import close_connection
+from .routes import authentication, packages
 from .middlewares import AuthenticationMiddleware
 from .. import __version__
 from ..config import config
@@ -67,7 +67,6 @@ class API:
                         | UnexpectedError.openapi_model()
                     },
                 },
-                default_response_class=ORJSONResponse,
                 version=__version__,
                 title="GramFood API",
                 root_path="/",
@@ -104,6 +103,7 @@ class API:
 
             self.app.router.lifespan_context = self._lifespan
             self.app.include_router(authentication.router)
+            self.app.include_router(packages.router)
 
             self._server = uvicorn.Server(
                 uvicorn.Config(
@@ -163,7 +163,7 @@ class API:
     async def _handle_request_validation(
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:
-        return ORJSONResponse(
+        return JSONResponse(
             {
                 "error": "ValidationError",
                 "message": "Request validation failed",
@@ -191,7 +191,7 @@ class API:
             exc_info=exc,
         )
 
-        return ORJSONResponse(
+        return JSONResponse(
             {
                 "error": "ResponseValidationError",
                 "message": "Response validation failed",
@@ -209,20 +209,22 @@ class API:
 
     @staticmethod
     async def _handle_base_error(request: Request, exc: BaseError) -> JSONResponse:
-        return ORJSONResponse(exc.serialize(), status_code=exc.http_code)
+        return JSONResponse(exc.serialize(), status_code=exc.http_code)
 
     @staticmethod
     async def _handle_unexpected_error(
         request: Request, exc: Exception
     ) -> JSONResponse:
-        error = UnexpectedError(
-            "Unexpected error happened in the API",
-            cause=exc,
-            payload={"path": request.url.path},
+        logger.exception(
+            UnexpectedError(
+                "Unexpected error happened in the API",
+                cause=exc,
+                payload={"path": request.url.path},
+            )
         )
 
-        logger.exception(error)
-        return ORJSONResponse(error.serialize(), status_code=error.http_code)
+        error = UnexpectedError()
+        return JSONResponse(error.serialize(), status_code=error.http_code)
 
     @staticmethod
     @asynccontextmanager
